@@ -250,7 +250,8 @@ Client Side Delay Shows Completion Message
 
 AJAX Data Shows Success And Record Count
     Open AJAX Data Assignment
-    Click Button    ${AJAX_FETCH_BUTTON}
+    Wait Until Element Is Visible    ${AJAX_FETCH_BUTTON}    15s
+    Wait Until Keyword Succeeds    3x    1s    Click Element    ${AJAX_FETCH_BUTTON}
     Wait Until Element Is Visible    ${AJAX_RESULT}    20s
     ${result_text}=    Get Text    ${AJAX_RESULT}
     Should Contain    ${result_text}    200 OK
@@ -440,6 +441,7 @@ Auto Wait Target Becomes Ready Before Click
     Go To    ${HOME_URL}
     Wait Until Element Is Visible    ${AUTO_WAIT_CARD}    60s
     Click Element    ${AUTO_WAIT_CARD}
+    Wait Until Element Is Visible    ${TEXT_INPUT_HEADER}    60s
     
     # Click start button
     Wait Until Element Is Visible    ${AUTO_WAIT_START}    60s
