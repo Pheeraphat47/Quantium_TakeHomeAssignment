@@ -22,3 +22,9 @@ output.xml
 .DS_Store
 Thumbs.db
 .vscode/
+
+# Environment variables (credentials - never commit)
+.env
+
+# Screenshots from test runs
+selenium-screenshot-*.png

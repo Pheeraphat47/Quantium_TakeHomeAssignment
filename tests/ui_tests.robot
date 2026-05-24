@@ -5,12 +5,12 @@ Suite Setup     Open Browser To Login
 Suite Teardown  Close Browser
 
 *** Variables ***
-${BASE_URL}    https://qa-exercise.quantiumtech.net
+${BASE_URL}    %{QA_BASE_URL=https://qa-exercise.quantiumtech.net}
 ${LOGIN_URL}   ${BASE_URL}/#/login
 ${HOME_URL}    ${BASE_URL}/#/home
-${BROWSER}     Chrome
-${USERNAME}    Candidate
-${PASSWORD}    Quantium
+${BROWSER}     %{QA_BROWSER=Chrome}
+${USERNAME}    %{QA_USERNAME=Candidate}
+${PASSWORD}    %{QA_PASSWORD=Quantium}
 
 # Login page locators
 ${LOGIN_USERNAME_INPUT}    css:input[type='text'], input[type='email']
@@ -85,6 +85,22 @@ ${MYSTERY_BUTTON_CARD}   css:button.topic-card[data-testid='topic-card-mystery-b
 ${MYSTERY_IFRAME}        css:iframe
 ${MYSTERY_BUTTON}        css:button[data-testid='frame-button']
 ${OUTER_COUNTER}         css:div[data-testid='outer-counter']
+
+# Disabled Input locators
+${DISABLED_INPUT_CARD}   css:button.topic-card[data-testid='topic-card-disabled-input']
+${ACTIVATE_BUTTON}       css:button[data-testid='activate']
+${DISABLED_INPUT}        css:input[data-testid='disabled-input']
+${DISABLED_RESULT}       css:div[data-testid='result']
+
+# Chart Interaction locators
+${CHART_CARD}    css:button.topic-card[data-testid='topic-card-chart-interaction']
+${CHART_HOST}    css:div[data-testid='chart']
+
+# Auto Wait locators
+${AUTO_WAIT_CARD}      css:button.topic-card[data-testid='topic-card-auto-wait']
+${AUTO_WAIT_START}     css:button[data-testid='start']
+${AUTO_WAIT_TARGET}    css:button[data-testid='target']
+${AUTO_WAIT_RESULT}    css:div[data-testid='result']
 
 
 *** Keywords ***
@@ -199,6 +215,21 @@ Target Should Be Not Visible To User
     ...    if (!topEl) return false;
     ...    return el === topEl || el.contains(topEl);
     Should Be Equal As Strings    ${is_visible}    False
+
+Verify Tooltip Contains
+    [Arguments]    ${expected_value}
+    ${tooltip}=    Execute Javascript
+    ...    var tt=document.querySelector('.google-visualization-tooltip');
+    ...    if(!tt)tt=document.querySelector('[role="tooltip"]');
+    ...    if(tt && tt.textContent.includes('${expected_value}')) return tt.textContent.trim();
+    ...    var svg=document.querySelector('[data-testid="chart"] svg');
+    ...    if(svg){
+    ...        var texts=Array.from(svg.querySelectorAll('text'));
+    ...        var found=texts.find(t => t.textContent.includes('${expected_value}'));
+    ...        if(found) return found.textContent;
+    ...    }
+    ...    return 'NO_TOOLTIP';
+    Should Contain    ${tooltip}    ${expected_value}
 
 *** Test Cases ***
 Text Input Button Reflects Typed Value
@@ -352,4 +383,77 @@ Mystery Button Click Increases Outer Counter
     ${expected}=    Evaluate    ${init_count} + 1
     ${expected_str}=    Convert To String    ${expected}
     Wait Until Keyword Succeeds    10x    1s    Element Attribute Value Should Be    ${OUTER_COUNTER}    data-count    ${expected_str}
+    Go To Assignments
+
+Disabled Input Accepts Text After Activation
+    Go To    ${HOME_URL}
+    Wait Until Element Is Visible    ${DISABLED_INPUT_CARD}    60s
+    Click Element    ${DISABLED_INPUT_CARD}
+    Wait Until Element Is Visible    ${ACTIVATE_BUTTON}    60s
+    # Click activate — the input will be enabled after a short delay
+    Click Button    ${ACTIVATE_BUTTON}
+    # Wait until the disabled attribute is removed
+    Wait Until Element Is Enabled    ${DISABLED_INPUT}    15s
+    ${test_value}=    Set Variable    Quantium123
+    Input Text    ${DISABLED_INPUT}    ${test_value}
+    # Confirm the typed value is captured in the result
+    Wait Until Element Is Visible    ${DISABLED_RESULT}    10s
+    ${result_text}=    Get Text    ${DISABLED_RESULT}
+    Should Contain    ${result_text}    ${test_value}
+    Go To Assignments
+
+Chart Interaction Tooltip Values Match Expected
+    Go To    ${HOME_URL}
+    Wait Until Element Is Visible    ${CHART_CARD}    60s
+    Click Element    ${CHART_CARD}
+    Wait Until Element Is Visible    ${CHART_HOST}    60s
+    # Wait for the Google Charts SVG to fully render inside the chart container
+    Wait Until Page Contains Element    css:[data-testid='chart'] svg    60s
+    Sleep    2s
+    # Parse expected values from the page text safely (ignoring 0 on Y-axis)
+    ${expected_str}=    Execute Javascript
+    ...    var days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],txt=document.body.innerText,vals=[];
+    ...    days.forEach(function(d){var m=txt.match(new RegExp(d+'\\\\s+([1-9]\\\\d*)'));if(m)vals.push(m[1]);});
+    ...    return vals.join('|');
+    @{expected_values}=    Evaluate    $expected_str.split('|')
+    # Hover each bar and verify tooltip contains the expected value
+    FOR    ${i}    IN RANGE    7
+        ${exp_val}=    Set Variable    ${expected_values}[${i}]
+        # Tag the i-th bar dynamically to avoid stale references since SVG re-renders on hover
+        Execute Javascript
+        ...    var svg=document.querySelector('[data-testid="chart"] svg');
+        ...    var rects=Array.from(svg.querySelectorAll('rect'));
+        ...    var bars=rects.filter(function(r){var f=r.getAttribute('fill'),o=r.getAttribute('fill-opacity'),h=parseFloat(r.getAttribute('height')),w=parseFloat(r.getAttribute('width'));return f&&f!=='#ffffff'&&f!=='#efefef'&&f!=='none'&&o!=='0'&&h>10&&w>20&&w<80;});
+        ...    bars.sort(function(a,b){return parseFloat(a.getAttribute('x'))-parseFloat(b.getAttribute('x'));});
+        ...    bars.forEach(function(b){b.removeAttribute('data-hover-target');});
+        ...    if(bars[${i}]) bars[${i}].setAttribute('data-hover-target', 'true');
+        
+        Wait Until Page Contains Element    css:rect[data-hover-target='true']    5s
+        Mouse Over    css:rect[data-hover-target='true']
+        
+        # Wait up to 2.5s for tooltip to update to the expected value
+        Wait Until Keyword Succeeds    5x    500ms    Verify Tooltip Contains    ${exp_val}
+    END
+    Go To Assignments
+
+Auto Wait Target Becomes Ready Before Click
+    Go To    ${HOME_URL}
+    Wait Until Element Is Visible    ${AUTO_WAIT_CARD}    60s
+    Click Element    ${AUTO_WAIT_CARD}
+    
+    # Click start button
+    Wait Until Element Is Visible    ${AUTO_WAIT_START}    60s
+    Click Button    ${AUTO_WAIT_START}
+    
+    # Wait for the target to become truly ready (label reads "Click me now")
+    Wait Until Element Is Visible    ${AUTO_WAIT_TARGET}    60s
+    Wait Until Keyword Succeeds    30x    1s    Element Text Should Be    ${AUTO_WAIT_TARGET}    Click me now
+    
+    # Click the target exactly once
+    Click Button    ${AUTO_WAIT_TARGET}
+    
+    # Confirm the success message appears
+    Wait Until Element Is Visible    ${AUTO_WAIT_RESULT}    10s
+    ${result_text}=    Get Text    ${AUTO_WAIT_RESULT}
+    Should Contain    ${result_text}    Target clicked exactly once at the right moment.
     Go To Assignments
