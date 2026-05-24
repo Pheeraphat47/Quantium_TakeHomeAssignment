@@ -65,6 +65,27 @@ ${HIDE_OFFSCREEN}         css:button[data-testid='hide-offscreen']
 ${HIDE_ZERO_SIZE}         css:button[data-testid='hide-zero-size']
 ${HIDE_COVERED}           css:button[data-testid='hide-covered']
 
+# Overlapped Element locators
+${OVERLAPPED_ELEMENT_CARD}   css:button.topic-card[data-testid='topic-card-overlapped-element']
+${OVERLAPPED_EMAIL_INPUT}    css:input[data-testid='overlapped-input']
+${OVERLAPPED_CONTAINER}      css:div[data-testid='overlapped-container']
+
+# Shadow DOM locators
+${SHADOW_DOM_CARD}    css:button.topic-card[data-testid='topic-card-shadow-dom']
+${SHADOW_HOST}        css:shadow-input[data-testid='shadow-host']
+${SHADOW_OUTER_ECHO}  css:div[data-testid='outer-echo']
+
+# File Upload locators
+${FILE_UPLOAD_CARD}      css:button.topic-card[data-testid='topic-card-file-upload']
+${FILE_INPUT}            css:input[data-testid='file-input']
+${UPLOADED_FILES_LIST}   css:div[data-testid='uploaded-files']
+
+# Mystery Button locators
+${MYSTERY_BUTTON_CARD}   css:button.topic-card[data-testid='topic-card-mystery-button']
+${MYSTERY_IFRAME}        css:iframe
+${MYSTERY_BUTTON}        css:button[data-testid='frame-button']
+${OUTER_COUNTER}         css:div[data-testid='outer-counter']
+
 
 *** Keywords ***
 Open Browser To Login
@@ -126,6 +147,12 @@ Open Visibility Assignment
     Wait Until Element Is Visible    ${VISIBILITY_CARD}    60s
     Click Element    ${VISIBILITY_CARD}
     Wait Until Element Is Visible    ${TEXT_INPUT_HEADER}    60s
+
+Open Overlapped Element Assignment
+    Go To    ${HOME_URL}
+    Wait Until Element Is Visible    ${OVERLAPPED_ELEMENT_CARD}    60s
+    Click Element    ${OVERLAPPED_ELEMENT_CARD}
+    Wait Until Element Is Visible    ${OVERLAPPED_CONTAINER}    60s
 
 Scroll Target Into View
     ${target}=    Get WebElement    ${SCROLL_TARGET_BUTTON}
@@ -256,4 +283,73 @@ Visibility Target Is Not Visible For Each Hide Method
     Wait Until Keyword Succeeds    5x    500ms    Target Should Be Not Visible To User
     Click Button    ${VISIBILITY_RESET}
     Wait Until Element Is Visible    ${VISIBILITY_TARGET}    5s
+    Go To Assignments
+
+Overlapped Element Email Field Accepts Input After Click Focus
+    Open Overlapped Element Assignment
+    ${test_value}=    Set Variable    test@quantium.com
+    # Click the email field first to give it focus before typing
+    # (direct send-keys without focusing may land on wrong element due to sticky header)
+    Click Element    ${OVERLAPPED_EMAIL_INPUT}
+    Input Text    ${OVERLAPPED_EMAIL_INPUT}    ${test_value}
+    ${typed_value}=    Get Element Attribute    ${OVERLAPPED_EMAIL_INPUT}    value
+    Should Be Equal As Strings    ${typed_value}    ${test_value}
+    Go To Assignments
+
+Shadow DOM Input Submits Value To Outer Page
+    Go To    ${HOME_URL}
+    Wait Until Element Is Visible    ${SHADOW_DOM_CARD}    60s
+    Click Element    ${SHADOW_DOM_CARD}
+    Wait Until Element Is Visible    ${SHADOW_HOST}    60s
+    ${test_value}=    Set Variable    QuantiumTest
+    # Standard locators cannot pierce shadow boundaries — use JavaScript to access shadowRoot
+    Execute Javascript
+    ...    const host = document.querySelector('shadow-input[data-testid="shadow-host"]');
+    ...    const input = host.shadowRoot.querySelector('input[data-testid="shadow-input"]');
+    ...    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    ...    nativeInputValueSetter.call(input, '${test_value}');
+    ...    input.dispatchEvent(new Event('input', {bubbles: true}));
+    ...    input.dispatchEvent(new Event('change', {bubbles: true}));
+    Execute Javascript
+    ...    const host = document.querySelector('shadow-input[data-testid="shadow-host"]');
+    ...    const btn = host.shadowRoot.querySelector('button[data-testid="shadow-submit"]');
+    ...    btn.click();
+    Wait Until Element Is Visible    ${SHADOW_OUTER_ECHO}    10s
+    ${echo_text}=    Get Text    ${SHADOW_OUTER_ECHO}
+    Should Contain    ${echo_text}    ${test_value}
+    Go To Assignments
+
+File Upload Shows Uploaded File Name In List
+    Go To    ${HOME_URL}
+    Wait Until Element Is Visible    ${FILE_UPLOAD_CARD}    60s
+    Click Element    ${FILE_UPLOAD_CARD}
+    # Wait for the visible drop zone (it's a <label>, not a <div>)
+    Wait Until Element Is Visible    css:[data-testid='file-drop']    60s
+    # Choose File works on hidden <input type="file"> directly
+    ${file_path}=    Set Variable    ${CURDIR}/test_files/test_upload.txt
+    Choose File    ${FILE_INPUT}    ${file_path}
+    # Wait for uploaded list to appear and contain the filename
+    Wait Until Element Is Visible    ${UPLOADED_FILES_LIST}    10s
+    ${list_text}=    Get Text    ${UPLOADED_FILES_LIST}
+    Should Contain    ${list_text}    test_upload.txt
+    Go To Assignments
+
+Mystery Button Click Increases Outer Counter
+    Go To    ${HOME_URL}
+    Wait Until Element Is Visible    ${MYSTERY_BUTTON_CARD}    60s
+    Click Element    ${MYSTERY_BUTTON_CARD}
+    # The button is inside a sandboxed iframe — must switch frame context to reach it
+    Wait Until Page Contains Element    ${MYSTERY_IFRAME}    60s
+    # Read initial counter value before clicking
+    ${init_str}=    Get Element Attribute    ${OUTER_COUNTER}    data-count
+    ${init_count}=    Convert To Integer    ${init_str}
+    # Switch into the iframe to interact with the button
+    Select Frame    ${MYSTERY_IFRAME}
+    Wait Until Element Is Visible    ${MYSTERY_BUTTON}    10s
+    Click Button    ${MYSTERY_BUTTON}
+    Unselect Frame
+    # Counter must increase by exactly 1
+    ${expected}=    Evaluate    ${init_count} + 1
+    ${expected_str}=    Convert To String    ${expected}
+    Wait Until Keyword Succeeds    10x    1s    Element Attribute Value Should Be    ${OUTER_COUNTER}    data-count    ${expected_str}
     Go To Assignments
