@@ -40,6 +40,32 @@ ${SCROLL_CONTAINER}      css:div[data-testid='scroll-container']
 ${SCROLL_TARGET_BUTTON}  css:button[data-testid='scroll-target']
 ${SCROLL_RESULT}         css:div[data-testid='result']
 
+# Dynamic Table locators
+${DYNAMIC_TABLE_CARD}     css:button.topic-card[data-testid='topic-card-dynamic-table']
+${DYNAMIC_TABLE_LABEL}    css:div[data-testid='chrome-cpu-label'] strong
+${DYNAMIC_TABLE}          css:table[data-testid='data-table']
+
+# Progress Bar locators
+${PROGRESS_BAR_CARD}     css:button.topic-card[data-testid='topic-card-progress-bar']
+${PROGRESS_BAR}          css:div[data-testid='progress-bar']
+${PROGRESS_FILL}         css:div[data-testid='progress-fill']
+${PROGRESS_START}        css:button[data-testid='start']
+${PROGRESS_STOP}         css:button[data-testid='stop']
+${PROGRESS_RESULT}       css:div[data-testid='result']
+${TEST_RESET}            css:button[data-testid='test-reset']
+
+# Visibility locators
+${VISIBILITY_CARD}        css:button.topic-card[data-testid='topic-card-visibility']
+${VISIBILITY_TARGET}      css:span[data-testid='target']
+${VISIBILITY_RESET}       css:button[data-testid='visibility-reset']
+${HIDE_DISPLAY}           css:button[data-testid='hide-display']
+${HIDE_VISIBILITY}        css:button[data-testid='hide-visibility']
+${HIDE_OPACITY}           css:button[data-testid='hide-opacity']
+${HIDE_OFFSCREEN}         css:button[data-testid='hide-offscreen']
+${HIDE_ZERO_SIZE}         css:button[data-testid='hide-zero-size']
+${HIDE_COVERED}           css:button[data-testid='hide-covered']
+
+
 *** Keywords ***
 Open Browser To Login
     Open Browser    ${LOGIN_URL}    ${BROWSER}
@@ -83,9 +109,69 @@ Open Scrollbars Assignment
     Click Element    ${SCROLLBARS_CARD}
     Wait Until Element Is Visible    ${TEXT_INPUT_HEADER}    60s
 
+Open Dynamic Table Assignment
+    Go To    ${HOME_URL}
+    Wait Until Element Is Visible    ${DYNAMIC_TABLE_CARD}    60s
+    Click Element    ${DYNAMIC_TABLE_CARD}
+    Wait Until Element Is Visible    ${TEXT_INPUT_HEADER}    60s
+
+Open Progress Bar Assignment
+    Go To    ${HOME_URL}
+    Wait Until Element Is Visible    ${PROGRESS_BAR_CARD}    60s
+    Click Element    ${PROGRESS_BAR_CARD}
+    Wait Until Element Is Visible    ${TEXT_INPUT_HEADER}    60s
+
+Open Visibility Assignment
+    Go To    ${HOME_URL}
+    Wait Until Element Is Visible    ${VISIBILITY_CARD}    60s
+    Click Element    ${VISIBILITY_CARD}
+    Wait Until Element Is Visible    ${TEXT_INPUT_HEADER}    60s
+
 Scroll Target Into View
     ${target}=    Get WebElement    ${SCROLL_TARGET_BUTTON}
     Execute Javascript    arguments[0].scrollIntoView({block: 'center', inline: 'center'});    ARGUMENTS    ${target}
+
+Get Chrome Cpu From Table
+    ${value}=    Execute Javascript
+    ...    const table=document.querySelector('table[data-testid="data-table"]');
+    ...    const headers=[...table.querySelectorAll('thead th')];
+    ...    const idx=headers.findIndex(h=>h.dataset.testid==='header-cpu');
+    ...    const row=table.querySelector('tbody tr[data-testid="row-chrome"]');
+    ...    const cells=[...row.querySelectorAll('td')];
+    ...    return cells[idx].innerText.trim();
+    RETURN    ${value}
+
+Stop Progress At Target
+    [Arguments]    ${target}
+    Click Button    ${PROGRESS_START}
+    Execute Javascript
+    ...    const bar = document.querySelector('[data-testid="progress-bar"]');
+    ...    const btn = document.querySelector('[data-testid="stop"]');
+    ...    const observer = new MutationObserver(() => {
+    ...        const val = parseInt(bar.getAttribute('aria-valuenow'), 10);
+    ...        if (val >= ${target}) {
+    ...            btn.click();
+    ...            observer.disconnect();
+    ...        }
+    ...    });
+    ...    observer.observe(bar, { attributes: true, attributeFilter: ['aria-valuenow'] });
+
+Target Should Be Not Visible To User
+    ${is_visible}=    Execute Javascript
+    ...    const el = document.querySelector('[data-testid="target"]');
+    ...    if (!el) return false;
+    ...    const style = window.getComputedStyle(el);
+    ...    if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) return false;
+    ...    const rect = el.getBoundingClientRect();
+    ...    if (rect.width === 0 || rect.height === 0) return false;
+    ...    const inViewport = rect.bottom > 0 && rect.right > 0 && rect.top < window.innerHeight && rect.left < window.innerWidth;
+    ...    if (!inViewport) return false;
+    ...    const cx = Math.floor(rect.left + rect.width / 2);
+    ...    const cy = Math.floor(rect.top + rect.height / 2);
+    ...    const topEl = document.elementFromPoint(cx, cy);
+    ...    if (!topEl) return false;
+    ...    return el === topEl || el.contains(topEl);
+    Should Be Equal As Strings    ${is_visible}    False
 
 *** Test Cases ***
 Text Input Button Reflects Typed Value
@@ -121,4 +207,53 @@ Scrollbars Click Hidden Button
     Wait Until Element Is Visible    ${SCROLL_RESULT}    10s
     ${result_text}=    Get Text    ${SCROLL_RESULT}
     Should Contain    ${result_text}    Target reached
+    Go To Assignments
+
+Dynamic Table Chrome CPU Matches Label
+    Open Dynamic Table Assignment
+    ${label_value}=    Get Text    ${DYNAMIC_TABLE_LABEL}
+    ${table_value}=    Get Chrome Cpu From Table
+    Should Be Equal As Strings    ${table_value}    ${label_value}
+    Go To Assignments
+
+Progress Bar Stops At 75 Percent
+    Open Progress Bar Assignment
+    Stop Progress At Target    75
+    Wait Until Element Is Visible    ${PROGRESS_RESULT}    15s
+    ${result_text}=    Get Text    ${PROGRESS_RESULT}
+    Should Contain    ${result_text}    Stopped at exactly 75%
+    Go To Assignments
+
+Visibility Target Is Not Visible For Each Hide Method
+    Open Visibility Assignment
+    Wait Until Element Is Visible    ${VISIBILITY_TARGET}    10s
+    Click Button    ${HIDE_DISPLAY}
+    Wait Until Keyword Succeeds    5x    500ms    Target Should Be Not Visible To User
+    Click Button    ${VISIBILITY_RESET}
+    Wait Until Element Is Visible    ${VISIBILITY_TARGET}    5s
+
+    Click Button    ${HIDE_VISIBILITY}
+    Wait Until Keyword Succeeds    5x    500ms    Target Should Be Not Visible To User
+    Click Button    ${VISIBILITY_RESET}
+    Wait Until Element Is Visible    ${VISIBILITY_TARGET}    5s
+
+    Click Button    ${HIDE_OPACITY}
+    Wait Until Keyword Succeeds    5x    500ms    Target Should Be Not Visible To User
+    Click Button    ${VISIBILITY_RESET}
+    Wait Until Element Is Visible    ${VISIBILITY_TARGET}    5s
+
+    Click Button    ${HIDE_OFFSCREEN}
+    Wait Until Keyword Succeeds    5x    500ms    Target Should Be Not Visible To User
+    Click Button    ${VISIBILITY_RESET}
+    Wait Until Element Is Visible    ${VISIBILITY_TARGET}    5s
+
+    Click Button    ${HIDE_ZERO_SIZE}
+    Wait Until Keyword Succeeds    5x    500ms    Target Should Be Not Visible To User
+    Click Button    ${VISIBILITY_RESET}
+    Wait Until Element Is Visible    ${VISIBILITY_TARGET}    5s
+
+    Click Button    ${HIDE_COVERED}
+    Wait Until Keyword Succeeds    5x    500ms    Target Should Be Not Visible To User
+    Click Button    ${VISIBILITY_RESET}
+    Wait Until Element Is Visible    ${VISIBILITY_TARGET}    5s
     Go To Assignments
